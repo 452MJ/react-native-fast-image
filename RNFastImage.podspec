@@ -7,12 +7,12 @@ Pod::Spec.new do |s|
   s.version       = package['version']
   s.summary       = package['description']
   s.authors       = { "Dylan Vann" => "dylan@dylanvann.com" }
-  s.homepage      = "https://github.com/452MJ/react-native-fast-image-jerry#readme"
+  s.homepage      = "https://github.com/DylanVann/react-native-fast-image#readme"
   s.license       = "MIT"
   s.platforms     = { :ios => "8.0", :tvos => "9.0" }
   s.framework     = 'UIKit'
   s.requires_arc  = true
-  s.source        = { :git => "https://github.com/452MJ/react-native-fast-image-jerry.git", :tag => "v#{s.version}" }
+  s.source        = { :git => "https://github.com/DylanVann/react-native-fast-image.git", :tag => "v#{s.version}" }
   s.source_files  = "ios/**/*.{h,m}"
 
   s.dependency 'React-Core'
