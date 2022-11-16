@@ -18,9 +18,11 @@ public class FastImageRequestListener implements RequestListener<Drawable> {
     static final String REACT_ON_LOAD_END_EVENT = "onFastImageLoadEnd";
 
     private String key;
+    private boolean isPaused;
 
-    FastImageRequestListener(String key) {
+    FastImageRequestListener(String key, boolean isPaused) {
         this.key = key;
+        this.isPaused = isPaused;
     }
 
     private static WritableMap mapFromResource(Drawable resource) {
@@ -50,8 +52,23 @@ public class FastImageRequestListener implements RequestListener<Drawable> {
         if (!(target instanceof ImageViewTarget)) {
             return false;
         }
+
         FastImageViewWithUrl view = (FastImageViewWithUrl) ((ImageViewTarget) target).getView();
         ThemedReactContext context = (ThemedReactContext) view.getContext();
+
+        if (resource instanceof WebpDrawable) {
+            WebpDrawable drawable = ((WebpDrawable) resource);
+            if (this.isPaused) {
+                drawable.stop();
+            }
+
+            if (!this.isPaused) {
+                drawable.startFromFirstFrame();
+            }
+
+            view.setImageDrawable(drawable);
+        }
+
         RCTEventEmitter eventEmitter = context.getJSModule(RCTEventEmitter.class);
         int viewId = view.getId();
         eventEmitter.receiveEvent(viewId, REACT_ON_LOAD_EVENT, mapFromResource(resource));
