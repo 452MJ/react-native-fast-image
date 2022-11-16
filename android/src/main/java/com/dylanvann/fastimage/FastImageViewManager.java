@@ -3,19 +3,13 @@ package com.dylanvann.fastimage;
 import android.app.Activity;
 import android.content.Context;
 import android.content.ContextWrapper;
-import android.graphics.Bitmap;
 import android.graphics.PorterDuff;
 import android.os.Build;
 
+
 import com.bumptech.glide.Glide;
 import com.bumptech.glide.RequestManager;
-import com.bumptech.glide.integration.webp.decoder.WebpDrawable;
-import com.bumptech.glide.integration.webp.decoder.WebpDrawableTransformation;
-import com.bumptech.glide.load.Transformation;
-import com.bumptech.glide.load.engine.bitmap_recycle.BitmapPool;
 import com.bumptech.glide.load.model.GlideUrl;
-import com.bumptech.glide.load.resource.bitmap.BitmapTransformation;
-import com.bumptech.glide.request.Request;
 import com.facebook.react.bridge.ReadableMap;
 import com.facebook.react.bridge.WritableMap;
 import com.facebook.react.bridge.WritableNativeMap;
@@ -25,7 +19,6 @@ import com.facebook.react.uimanager.ThemedReactContext;
 import com.facebook.react.uimanager.annotations.ReactProp;
 import com.facebook.react.uimanager.events.RCTEventEmitter;
 
-import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -37,8 +30,6 @@ import javax.annotation.Nullable;
 import static com.dylanvann.fastimage.FastImageRequestListener.REACT_ON_ERROR_EVENT;
 import static com.dylanvann.fastimage.FastImageRequestListener.REACT_ON_LOAD_END_EVENT;
 import static com.dylanvann.fastimage.FastImageRequestListener.REACT_ON_LOAD_EVENT;
-
-import androidx.annotation.NonNull;
 
 class FastImageViewManager extends SimpleViewManager<FastImageViewWithUrl> implements FastImageProgressListener {
 
@@ -68,27 +59,6 @@ class FastImageViewManager extends SimpleViewManager<FastImageViewWithUrl> imple
     public void setSrc(FastImageViewWithUrl view, @Nullable ReadableMap source) {
         if (source == null || !source.hasKey("uri") || isNullOrEmpty(source.getString("uri"))) {
             // Cancel existing requests.
-            clearView(view);
-
-            if (view.glideUrl != null) {
-                FastImageOkHttpProgressGlideModule.forget(view.glideUrl.toStringUrl());
-            }
-            // Clear the image.
-            view.setImageDrawable(null);
-            return;
-        }
-
-        //final GlideUrl glideUrl = FastImageViewConverter.getGlideUrl(view.getContext(), source);
-        final FastImageSource imageSource = FastImageViewConverter.getImageSource(view.getContext(), source);
-        if (imageSource.getUri().toString().length() == 0) {
-            ThemedReactContext context = (ThemedReactContext) view.getContext();
-            RCTEventEmitter eventEmitter = context.getJSModule(RCTEventEmitter.class);
-            int viewId = view.getId();
-            WritableMap event = new WritableNativeMap();
-            event.putString("message", "Invalid source prop:" + source);
-            eventEmitter.receiveEvent(viewId, REACT_ON_ERROR_EVENT, event);
-
-            // Cancel existing requests.
             if (requestManager != null) {
                 requestManager.clear(view);
             }
@@ -101,11 +71,16 @@ class FastImageViewManager extends SimpleViewManager<FastImageViewWithUrl> imple
             return;
         }
 
+        //final GlideUrl glideUrl = FastImageViewConverter.getGlideUrl(view.getContext(), source);
+        final FastImageSource imageSource = FastImageViewConverter.getImageSource(view.getContext(), source);
         final GlideUrl glideUrl = imageSource.getGlideUrl();
+        final boolean isPaused = source.hasKey("isPaused") ? new String("true").equals(source.getString("isPaused")) : false;
 
         // Cancel existing request.
         view.glideUrl = glideUrl;
-        clearView(view);
+        if (requestManager != null) {
+            requestManager.clear(view);
+        }
 
         String key = glideUrl.toStringUrl();
         FastImageOkHttpProgressGlideModule.expect(key, this);
@@ -122,32 +97,18 @@ class FastImageViewManager extends SimpleViewManager<FastImageViewWithUrl> imple
         int viewId = view.getId();
         eventEmitter.receiveEvent(viewId, REACT_ON_LOAD_START_EVENT, new WritableNativeMap());
 
-
-        Transformation<Bitmap> transformation = new BitmapTransformation() {
-            @Override
-            protected Bitmap transform(@NonNull BitmapPool pool, @NonNull Bitmap toTransform, int outWidth, int outHeight) {
-                return toTransform;
-            }
-
-            @Override
-            public void updateDiskCacheKey(@NonNull MessageDigest messageDigest) {
-
-            }
-        };
         if (requestManager != null) {
             requestManager
-                    // This will make this work for remote and local images. e.g.
-                    //    - file:///
-                    //    - content://
-                    //    - res:/
-                    //    - android.resource://
-                    //    - data:image/png;base64
-                    .load(imageSource.getSourceForLoad())
-                    .optionalTransform(transformation)
-                    .optionalTransform(WebpDrawable.class, new WebpDrawableTransformation(transformation))
-                    .apply(FastImageViewConverter.getOptions(context, imageSource, source))
-                    .listener(new FastImageRequestListener(key))
-                    .into(view);
+                // This will make this work for remote and local images. e.g.
+                //    - file:///
+                //    - content://
+                //    - res:/
+                //    - android.resource://
+                //    - data:image/png;base64
+                .load(imageSource.getSourceForLoad())
+                .apply(FastImageViewConverter.getOptions(context, imageSource, source))
+                .listener(new FastImageRequestListener(key, isPaused))
+                .into(view);
         }
     }
 
@@ -169,7 +130,9 @@ class FastImageViewManager extends SimpleViewManager<FastImageViewWithUrl> imple
     @Override
     public void onDropViewInstance(FastImageViewWithUrl view) {
         // This will cancel existing requests.
-        clearView(view);
+        if (requestManager != null) {
+            requestManager.clear(view);
+        }
 
         if (view.glideUrl != null) {
             final String key = view.glideUrl.toString();
@@ -187,12 +150,12 @@ class FastImageViewManager extends SimpleViewManager<FastImageViewWithUrl> imple
     @Override
     public Map<String, Object> getExportedCustomDirectEventTypeConstants() {
         return MapBuilder.<String, Object>builder()
-                .put(REACT_ON_LOAD_START_EVENT, MapBuilder.of("registrationName", REACT_ON_LOAD_START_EVENT))
-                .put(REACT_ON_PROGRESS_EVENT, MapBuilder.of("registrationName", REACT_ON_PROGRESS_EVENT))
-                .put(REACT_ON_LOAD_EVENT, MapBuilder.of("registrationName", REACT_ON_LOAD_EVENT))
-                .put(REACT_ON_ERROR_EVENT, MapBuilder.of("registrationName", REACT_ON_ERROR_EVENT))
-                .put(REACT_ON_LOAD_END_EVENT, MapBuilder.of("registrationName", REACT_ON_LOAD_END_EVENT))
-                .build();
+            .put(REACT_ON_LOAD_START_EVENT, MapBuilder.of("registrationName", REACT_ON_LOAD_START_EVENT))
+            .put(REACT_ON_PROGRESS_EVENT, MapBuilder.of("registrationName", REACT_ON_PROGRESS_EVENT))
+            .put(REACT_ON_LOAD_EVENT, MapBuilder.of("registrationName", REACT_ON_LOAD_EVENT))
+            .put(REACT_ON_ERROR_EVENT, MapBuilder.of("registrationName", REACT_ON_ERROR_EVENT))
+            .put(REACT_ON_LOAD_END_EVENT, MapBuilder.of("registrationName", REACT_ON_LOAD_END_EVENT))
+            .build();
     }
 
     @Override
@@ -261,11 +224,5 @@ class FastImageViewManager extends SimpleViewManager<FastImageViewWithUrl> imple
             return activity.isDestroyed() || activity.isFinishing() || activity.isChangingConfigurations();
         }
 
-    }
-
-    private void clearView(FastImageViewWithUrl view) {
-        if (requestManager != null && view != null && view.getTag() != null && view.getTag() instanceof Request) {
-            requestManager.clear(view);
-        }
     }
 }
